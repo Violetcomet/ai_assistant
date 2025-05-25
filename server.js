@@ -19,13 +19,52 @@ app.use(bodyParser.json()); // To parse JSON request bodies
 app.use(cors()); // Enable CORS for all routes (important for front-end integration later)
 
 // --- Basic Test Endpoint ---
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
     res.send('Notion AI Backend is running!');
-});
 
 // --- Core AI Processing Endpoint ---
 // This is where the magic will happen!
 app.post('/process-notion-content', async (req, res) => {
+    // Change: 'content' is now fetched from Notion, not from the request body
+    const { action, notionPageId } = req.body; // Only extract action and notionPageId
+
+    if (!notionPageId || !action) {
+        return res.status(400).json({ success: false, message: 'Notion Page ID and action are required.' });
+    }
+
+    let contentToProcess;
+    try {
+        // NEW: Fetch content directly from Notion
+        contentToProcess = await fetchNotionPageContent(notionPageId);
+        if (!contentToProcess || contentToProcess.trim() === '') {
+            return res.status(400).json({ success: false, message: 'No textual content found in the Notion page to process.' });
+        }
+    } catch (error) {
+        console.error('Error in fetching Notion content:', error);
+        return res.status(500).json({ success: false, message: `Failed to fetch content from Notion: ${error.message}` });
+    }
+
+    let prompt;
+    // The rest of your existing logic for 'prompt' generation remains the same,
+    // but it will now use 'contentToProcess' instead of 'content'
+    switch (action) {
+        case 'summarize':
+            prompt = `Summarize the following text:\n\n${contentToProcess}`;
+            break;
+        case 'brainstorm':
+            prompt = `Brainstorm creative ideas/applications/related concepts based on the following: ${contentToProcess}`;
+            break;
+        case 'improve_writing':
+            prompt = `Improve the following writing, focusing on clarity, conciseness, and impact, while retaining the original meaning:\n\n${contentToProcess}`;
+            break;
+        default:
+            return res.status(400).json({ success: false, message: 'Invalid action specified.' });
+    }
+    // ... (rest of your existing code for calling Gemini and updating Notion)
+    // Ensure you use 'contentToProcess' in the prompt, not 'content'
+    // Example: const result = await model.generateContent(prompt);
+    // And ensure 'notionPageId' is used for the append block.
+});
     console.log('Received request. req.body is:', req.body);
     // We expect to receive 'content' (text or URL), 'action' (e.g., "summarize"),
     // and optionally 'notionPageId' where the output should go.
@@ -46,6 +85,50 @@ app.post('/process-notion-content', async (req, res) => {
     }
 
     const notion = new Client({ auth: NOTION_API_KEY });
+    // Function to extract text from Notion blocks
+function extractTextFromBlocks(blocks) {
+    let text = '';
+    blocks.forEach(block => {
+        if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
+            text += block.paragraph.rich_text.map(rt => rt.plain_text).join('') + '\n';
+        }
+        // Add more block types if you want to extract text from headings, etc.
+        // else if (block.type === 'heading_1' && block.heading_1.rich_text.length > 0) {
+        //     text += '# ' + block.heading_1.rich_text.map(rt => rt.plain_text).join('') + '\n';
+        // }
+        // else if (block.type === 'heading_2' && block.heading_2.rich_text.length > 0) {
+        //     text += '## ' + block.heading_2.rich_text.map(rt => rt.plain_text).join('') + '\n';
+        // }
+        // ... and so on for other block types
+    });
+    return text;
+}
+
+// Function to fetch content from a Notion page
+async function fetchNotionPageContent(pageId) {
+    try {
+        let allBlocks = [];
+        let cursor = undefined; // For pagination
+
+        do {
+            const response = await notion.blocks.children.list({
+                block_id: pageId,
+                start_cursor: cursor,
+                page_size: 100, // Fetch up to 100 blocks at a time
+            });
+
+            allBlocks = allBlocks.concat(response.results);
+            cursor = response.next_cursor; // Check for more blocks
+
+        } while (cursor); // Continue if there are more blocks
+
+        return extractTextFromBlocks(allBlocks);
+
+    } catch (error) {
+        console.error("Error fetching Notion page content:", error);
+        throw new Error(`Failed to fetch content from Notion page: ${error.message}`);
+    }
+}
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); // Or "gemini-pro" for more power
 
