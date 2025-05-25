@@ -30,7 +30,7 @@ if (process.env.NOTION_API_KEY) {
 let model;
 if (process.env.GEMINI_API_KEY) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
 } else {
     console.error('GEMINI_API_KEY is not set. Gemini model will not be initialized.');
     // Consider throwing an error or handling this case gracefully.
