@@ -17,6 +17,7 @@ const port = process.env.PORT || 3000; // Use port from environment or default t
 // Middleware
 app.use(bodyParser.json()); // To parse JSON request bodies
 app.use(cors()); // Enable CORS for all routes (important for front-end integration later)
+app.use(express.json()); // This middleware parses incoming JSON request bodies
 
 // --- Basic Test Endpoint ---
 app.get('/', async (req, res) => {
